@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
 
 // Default test route
 Route::get('/user', function (Request $request) {
@@ -9,6 +10,4 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 // Custom API route
-Route::get('/hello', function () {
-    return response()->json(['message' => 'Hello from API!']);
-});
+Route::get('/hello', [AuthController::class, 'index']);

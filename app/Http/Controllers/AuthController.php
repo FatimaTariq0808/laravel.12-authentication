@@ -7,6 +7,7 @@ use App\Events\UserRegistered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use App\Models\ApiToken;
 class AuthController extends Controller
 {
 
@@ -25,11 +26,26 @@ class AuthController extends Controller
             'password' => bcrypt($request->password),
         ]);
         // event(new UserRegistered($user));
-        $token = $user->createToken($request->email);
+        // $token = $user->createToken($request->email);
 
-        return response()->json(['message' => 'User registered successfully', 'data' => $user
-        , 'token' => $token->plainTextToken]
-        , 201);
+        $plainTextToken = Str::random(60);
+
+        ApiToken::create([
+            'user_id' => $user->id,
+            'token' => hash('sha256', $plainTextToken), 
+            'expires_at' => now()->addHours(24), 
+        ]);
+
+        return response()->json(
+            [
+                'message' => 'User registered successfully',
+                'data' => $user
+                ,
+                'token' => $plainTextToken
+            ]
+            ,
+            201
+        );
     }
     public function login(Request $request)
     {
@@ -41,21 +57,45 @@ class AuthController extends Controller
         // dd($request->all());
         $user = User::where('email', $request->email)->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-        $token = $user->createToken($request->email);
-
+        // $token = $user->createToken($request->email);
+        $plainTextToken = Str::random(60);
+        $hashedToken = hash('sha256', $plainTextToken);
+        ApiToken::create([
+            'user_id' => $user->id,
+            'token' => hash('sha256', $plainTextToken), 
+            'expires_at' => now()->addHours(24), 
+        ]);
+        echo $hashedToken;
         event(new UserRegistered($user));
-        return response()->json(['message' => 'Logged In successfully',
-         'data' => $user,
-         'token'=>$token->plainTextToken], 200);
+        return response()->json([
+            'message' => 'Logged In successfully',
+            'data' => $user,
+            'token' => $plainTextToken
+        ], 200);
     }
+
     public function logout(Request $request)
     {
-
-        $request->user()->tokens()->delete();
+        $authHeader = $request->header('Authorization');
+        // echo $authHeader;
+        if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+        $parts = explode(' ', $authHeader);
+        $plainToken = trim($parts[2]);
+        $hashedToken = hash('sha256', $plainToken);
+        // echo $plainToken,$hashedToken;
+        $token = ApiToken::where('token', $hashedToken)->first();
+        echo $token;
+        if (!$token) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+    
+        $token->delete(); 
 
         return response()->json(['message' => 'Logout successful'], 200);
     }
@@ -68,7 +108,7 @@ class AuthController extends Controller
         ]);
 
         $user = User::where('email', $request->email)->first();
-        if (! $user) {
+        if (!$user) {
             return response()->json(['message' => 'Email not found'], 404);
         }
 
@@ -80,9 +120,12 @@ class AuthController extends Controller
         $user->reset_token_expires_at = now()->addHours(24);
         $user->save();
 
-        event(new UserRequestedPassword($user,$resetURL));
-        return response()->json(['message' => 'Password reset link sent'
-        ,'resetURL'=>$resetURL], 200);
+        event(new UserRequestedPassword($user, $resetURL));
+        return response()->json([
+            'message' => 'Password reset link sent'
+            ,
+            'resetURL' => $resetURL
+        ], 200);
     }
     public function resetPassword(Request $request, $token)
     {
@@ -93,8 +136,8 @@ class AuthController extends Controller
         ]);
 
         $user = User::where('reset_token', $token)->first();
-    
-        if (! $user) {
+
+        if (!$user) {
             return response()->json(['message' => 'Invalid token.'], 404);
         }
         if ($user->reset_token_expires_at && $user->reset_token_expires_at < now()) {
@@ -103,13 +146,13 @@ class AuthController extends Controller
         if ($user->email !== $request->email) {
             return response()->json(['message' => 'Email does not match the reset request.'], 400);
         }
-        
+
         $user->password = bcrypt($request->password);
         $user->reset_token = null;
         $user->reset_token_expires_at = null;
         $user->save();
-        
-    
+
+
         return response()->json(['message' => 'Password reset successfully.']);
     }
 

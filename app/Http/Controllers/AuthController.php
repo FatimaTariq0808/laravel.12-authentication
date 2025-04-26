@@ -100,6 +100,9 @@ class AuthController extends Controller
         if ($user->reset_token_expires_at && $user->reset_token_expires_at < now()) {
             return response()->json(['message' => 'Token has expired.'], 400);
         }
+        if ($user->email !== $request->email) {
+            return response()->json(['message' => 'Email does not match the reset request.'], 400);
+        }
         
         $user->password = bcrypt($request->password);
         $user->reset_token = null;

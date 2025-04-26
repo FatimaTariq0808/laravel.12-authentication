@@ -13,12 +13,12 @@
 
 <div class="email-container">
     <div class="header">
-        <h2>Welcome to Our App 🎉</h2>
+        <h2>Welcome to Laravel 🎉</h2>
     </div>
 
     <div class="content">
         <h1>Welcome {{ $user->name }}!</h1>
-        <p>Thanks for registering on our site.</p>
+        <p>Thanks for Logging In.</p>
         <p>Enjoy the experience! 🚀</p>
     </div>
 

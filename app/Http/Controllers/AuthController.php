@@ -6,7 +6,7 @@ use App\Models\User;
 use App\Events\UserRegistered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-
+use Illuminate\Support\Str;
 class AuthController extends Controller
 {
 
@@ -19,7 +19,6 @@ class AuthController extends Controller
             'password' => 'required|string|min:8|confirmed',
         ]);
 
-        // Creating the user
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -63,7 +62,7 @@ class AuthController extends Controller
 
     public function forgotPassword(Request $request)
     {
-        // Validate the request
+
         $request->validate([
             'email' => 'required|email|exists:users',
         ]);
@@ -73,28 +72,42 @@ class AuthController extends Controller
             return response()->json(['message' => 'Email not found'], 404);
         }
 
-        $token = $user->createToken($request->email)->plainTextToken;
+        // $token = $user->createToken($request->email)->plainTextToken;
+        $token = base64_encode(Str::random(40));
         $resetURL = url('/api/reset-password/' . $token);
+
+        $user->reset_token = $token;
+        $user->reset_token_expires_at = now()->addHours(24);
+        $user->save();
 
         event(new UserRequestedPassword($user,$resetURL));
         return response()->json(['message' => 'Password reset link sent'
-        ,'resetURL'=>$resetURL
-        ,'token'=>$token], 200);
+        ,'resetURL'=>$resetURL], 200);
     }
-    public function resetPassword(Request $request)
+    public function resetPassword(Request $request, $token)
     {
-        // Validate the request
+
         $request->validate([
-            'email' => 'required|email|exists:users,email',
-            'password' => 'required|string|min:8|confirmed',
+            'email' => 'required|email|exists:users',
+            'password' => 'required|min:8|confirmed',
         ]);
 
-        // Logic to reset the password
-        $user = User::where('email', $request->email)->first();
+        $user = User::where('reset_token', $token)->first();
+    
+        if (! $user) {
+            return response()->json(['message' => 'Invalid token.'], 404);
+        }
+        if ($user->reset_token_expires_at && $user->reset_token_expires_at < now()) {
+            return response()->json(['message' => 'Token has expired.'], 400);
+        }
+        
         $user->password = bcrypt($request->password);
+        $user->reset_token = null;
+        $user->reset_token_expires_at = null;
         $user->save();
-
-        return response()->json(['message' => 'Password reset successfully'], 200);
+        
+    
+        return response()->json(['message' => 'Password reset successfully.']);
     }
 
 }

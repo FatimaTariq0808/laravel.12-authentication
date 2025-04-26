@@ -21,7 +21,7 @@ class UserRequestedPassword
      */
     public function __construct(User $user,$resetURL)
     {
-        \Log::info('UserRequestedPassword event triggered');
+        // \Log::info('UserRequestedPassword event triggered');
         $this->user = $user;
         $this->resetURL = $resetURL;
     }

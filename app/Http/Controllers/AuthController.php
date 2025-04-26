@@ -25,7 +25,7 @@ class AuthController extends Controller
             'email' => $request->email,
             'password' => bcrypt($request->password),
         ]);
-        // event(new UserRegistered($user));
+        event(new UserRegistered($user));
         // $token = $user->createToken($request->email);
 
         $plainTextToken = Str::random(60);

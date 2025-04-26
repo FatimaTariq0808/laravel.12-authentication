@@ -1,48 +1,53 @@
 <?php
 
 namespace App\Http\Controllers;
-
+use App\Models\User;
+use App\Events\UserRegistered;  
 use Illuminate\Http\Request;
 
 class AuthController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    
+    public function login(Request $request)
     {
-        echo "Login";
+        // Validate the request
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+        // dd($request->all());
+        // Attempt to log the user in
+        if (auth()->attempt($request->only('email', 'password'))) {
+            return response()->json(['message' => 'Login successful'], 200);
+        }
+
+        return response()->json(['message' => 'Invalid credentials'], 401);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    public function logout(Request $request)
     {
-        //
-    }
+        // Log the user out
+        auth()->logout();
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
+        return response()->json(['message' => 'Logout successful'], 200);
     }
+    public function register(Request $request)
+    {
+        // Validating the request
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
-    }
+        // Creating the user
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => bcrypt($request->password),
+        ]);
+        event(new UserRegistered($user));
+        
+        return response()->json(['message' => 'User registered successfully','data'=>$user], 201);
+    }   
 }

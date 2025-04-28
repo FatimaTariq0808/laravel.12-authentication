@@ -8,9 +8,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Models\ApiToken;
+use App\Services\JWTService;
 class AuthController extends Controller
 {
-
+    protected $tokenService;
+    public function __construct(JWTService $tokenService)
+    {
+        $this->tokenService = $tokenService;
+    }
     public function register(Request $request)
     {
         // Validating the request
@@ -28,11 +33,12 @@ class AuthController extends Controller
         event(new UserRegistered($user));
         // $token = $user->createToken($request->email);
 
-        $plainTextToken = Str::random(60);
-
+        // $plainTextToken = Str::random(60);
+        $jwt = $this->tokenService->generateToken($user);
+        ApiToken::where('user_id', $user->id)->delete();
         ApiToken::create([
             'user_id' => $user->id,
-            'token' => hash('sha256', $plainTextToken), 
+            'token' => hash('sha256', $jwt), 
             'expires_at' => now()->addHours(24), 
         ]);
 
@@ -41,7 +47,7 @@ class AuthController extends Controller
                 'message' => 'User registered successfully',
                 'data' => $user
                 ,
-                'token' => $plainTextToken
+                'token' => $jwt
             ]
             ,
             201
@@ -62,19 +68,22 @@ class AuthController extends Controller
         }
 
         // $token = $user->createToken($request->email);
-        $plainTextToken = Str::random(60);
-        $hashedToken = hash('sha256', $plainTextToken);
+        // $plainTextToken = Str::random(60);
+        $jwt = $this->tokenService->generateToken($user);
+
+        // $hashedToken = hash('sha256', $jwt);
+        ApiToken::where('user_id', $user->id)->delete();
         ApiToken::create([
             'user_id' => $user->id,
-            'token' => hash('sha256', $plainTextToken), 
+            'token' => hash('sha256', $jwt), 
             'expires_at' => now()->addHours(24), 
         ]);
-        echo $hashedToken;
+        // echo $hashedToken;
         event(new UserRegistered($user));
         return response()->json([
             'message' => 'Logged In successfully',
             'data' => $user,
-            'token' => $plainTextToken
+            'token' => $jwt
         ], 200);
     }
 
@@ -86,16 +95,22 @@ class AuthController extends Controller
             return response()->json(['message' => 'Token not provided'], 401);
         }
         $parts = explode(' ', $authHeader);
-        $plainToken = trim($parts[2]);
-        $hashedToken = hash('sha256', $plainToken);
+        $jwt = trim($parts[2]);
+        // $hashedToken = hash('sha256', $plainToken);
         // echo $plainToken,$hashedToken;
-        $token = ApiToken::where('token', $hashedToken)->first();
-        echo $token;
-        if (!$token) {
+
+
+        if (!$this->tokenService->invalidateToken($jwt)) {
             return response()->json(['message' => 'Invalid token'], 401);
         }
+
+        // $token = ApiToken::where('token', $hashedToken)->first();
+        // echo $token;
+        // if (!$token) {
+        //     return response()->json(['message' => 'Invalid token'], 401);
+        // }
     
-        $token->delete(); 
+        // $token->delete(); 
 
         return response()->json(['message' => 'Logout successful'], 200);
     }

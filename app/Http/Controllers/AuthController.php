@@ -1,15 +1,23 @@
 <?php
 
 namespace App\Http\Controllers;
-use App\Events\UserRequestedPassword;
 use App\Models\User;
-use App\Events\UserRegistered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
-use App\Models\ApiToken;
+use App\Jobs\SendWelcomeEmail;
+use App\Services\TokenService;
+use App\Services\PasswordResetService;
 class AuthController extends Controller
 {
+
+    protected $tokenService;
+    protected $passwordResetService;
+
+    public function __construct(TokenService $tokenService, PasswordResetService $passwordResetService)
+    {
+        $this->tokenService = $tokenService;
+        $this->passwordResetService = $passwordResetService;
+    }
 
     public function register(Request $request)
     {
@@ -25,23 +33,13 @@ class AuthController extends Controller
             'email' => $request->email,
             'password' => bcrypt($request->password),
         ]);
-        event(new UserRegistered($user));
-        // $token = $user->createToken($request->email);
 
-        $plainTextToken = Str::random(60);
-
-        ApiToken::create([
-            'user_id' => $user->id,
-            'token' => hash('sha256', $plainTextToken), 
-            'expires_at' => now()->addHours(24), 
-        ]);
 
         return response()->json(
             [
                 'message' => 'User registered successfully',
                 'data' => $user
                 ,
-                'token' => $plainTextToken
             ]
             ,
             201
@@ -61,48 +59,40 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-        // $token = $user->createToken($request->email);
-        $plainTextToken = Str::random(60);
-        $hashedToken = hash('sha256', $plainTextToken);
-        ApiToken::create([
-            'user_id' => $user->id,
-            'token' => hash('sha256', $plainTextToken), 
-            'expires_at' => now()->addHours(24), 
-        ]);
-        echo $hashedToken;
-        event(new UserRegistered($user));
+        $tokenData = $this->tokenService->generateToken($user);
+        SendWelcomeEmail::dispatch($user);
+        
         return response()->json([
-            'message' => 'Logged In successfully',
+            'message' => 'Logged in successfully',
             'data' => $user,
-            'token' => $plainTextToken
+            'token' => $tokenData['token'],
+            'expires_at' => $tokenData['expires_at'],
         ], 200);
+
     }
+
 
     public function logout(Request $request)
     {
         $authHeader = $request->header('Authorization');
-        // echo $authHeader;
+
         if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
             return response()->json(['message' => 'Token not provided'], 401);
         }
         $parts = explode(' ', $authHeader);
         $plainToken = trim($parts[2]);
-        $hashedToken = hash('sha256', $plainToken);
-        // echo $plainToken,$hashedToken;
-        $token = ApiToken::where('token', $hashedToken)->first();
-        echo $token;
-        if (!$token) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
-    
-        $token->delete(); 
+        
+        // echo '' . $plainToken . '';
 
-        return response()->json(['message' => 'Logout successful'], 200);
+
+        $this->tokenService->invalidateToken($plainToken);
+
+        return response()->json(['message' => 'Logged out']);
     }
+
 
     public function forgotPassword(Request $request)
     {
-
         $request->validate([
             'email' => 'required|email|exists:users',
         ]);
@@ -112,20 +102,8 @@ class AuthController extends Controller
             return response()->json(['message' => 'Email not found'], 404);
         }
 
-        // $token = $user->createToken($request->email)->plainTextToken;
-        $token = base64_encode(Str::random(40));
-        $resetURL = url('/api/reset-password/' . $token);
-
-        $user->reset_token = $token;
-        $user->reset_token_expires_at = now()->addHours(24);
-        $user->save();
-
-        event(new UserRequestedPassword($user, $resetURL));
-        return response()->json([
-            'message' => 'Password reset link sent'
-            ,
-            'resetURL' => $resetURL
-        ], 200);
+        // Call the service to send the reset link
+        return $this->passwordResetService->sendResetLink($user);
     }
     public function resetPassword(Request $request, $token)
     {

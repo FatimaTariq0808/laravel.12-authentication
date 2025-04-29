@@ -24,6 +24,6 @@ class SendRequestedEmail implements ShouldQueue
     public function handle(UserRequestedPassword $event): void
     {
         // \Log::info('Listener Request triggered!');
-        Mail::to($event->user->email)->send(new ResetPasswordMail($event->resetURL));
+        Mail::to($event->user->email)->queue(new ResetPasswordMail($event->resetURL));
     }
 }

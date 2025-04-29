@@ -40,17 +40,21 @@ class TokenService
     }
 
     public function invalidateToken(string $plainToken): bool
-{
-    $hashedToken = hash('sha256', $plainToken);
-
-    $token = PersonalAccessToken::where('token', $hashedToken)->first();
-
-    if ($token) {
-        $token->delete(); 
-        return true;
+    {
+        $hashedToken = hash('sha256', $plainToken);
+    
+        
+        $token = PersonalAccessToken::where('token', $hashedToken)->first();
+    
+        if ($token) {
+            PersonalAccessToken::where('tokenable_type', get_class($token->tokenable))
+                               ->where('tokenable_id', $token->tokenable_id)
+                               ->delete();
+    
+            return true;
+        }
+    
+        return false;
     }
-
-    return false; 
-}
-
+    
 }
